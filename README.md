@@ -2,4 +2,4 @@
 SQLC review
 
 
-Our trained models will be published here as relase after publishing the paper 
+Our trained models are published here https://drive.google.com/drive/folders/1KSAOLBw8iQEjQD2v6jWUG9t0uTRlnPef?usp=sharing 
