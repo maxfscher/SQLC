@@ -35,26 +35,7 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic=True
     torch.backends.cudnn.benchmark=True
 seed_everything(42)
-def encodeUNet():
-    model = FiveUNet_ExtractFuncs(BneckOut=512)
-    states = '/home/m813r/Projects/NeuralImageCompression/CLICchallenge/checkpoint_best_loss.pth.tar'
-    states = torch.load(states)
-    model.load_state_dict(states)
-    model.eval()
-    path='/home/m813r/Downloads/clic2024_validation_image'
-    _,_,files=next(os.walk(path))
-    for file in files:
-        name=file
-        file=Image.open(os.path.join(path,file))
-        shape=file.size
-        file=np.asarray(file)
-        file=transforms.ToTensor()(file)
-        transformation=transforms.Resize((224,224))
-        test=transformation(file)
-        Reconstruction,latents=model(test.unsqueeze(0))
-        name=name[:-4]
-        file_name=name+'-'+str(shape[0])+'_'+str(shape[1])+'.pt'
-        torch.save(latents,'/home/m813r/Projects/NeuralImageCompression/CLICchallenge/compressed_images/'+file_name)
+
 
 def StainDeconvHistomics(PILImg):
     stains = ['hematoxylin',  # nuclei stain
@@ -75,64 +56,8 @@ def preprocessSQLC(img,model):
 
 
 
-def CompressCAImodels():
-    models_path='/home/m813r/ClusterCheckpoints/NeuralImageCompression/TrainedCAEmodels/RMS/_bmshj2018-factorized/AdaptableBN_RandomAugment'
-    _,Runs,_=next(os.walk(models_path))
-    lmds=[float(x.split('_')[-1]) for x in Runs]
-    #lmds = [0.001,0.003,0.004,0.5,0.8,1.0,0.3]
-    for lambda_train in lmds:
-        if lambda_train <= 0.05:
-            quality = 1
-        else:
-            quality = 8
-
-        #quality=lambda_train
-        model_function = models['bmshj2018-factorized']  # models['bmshj2018-factorized']
-        net = model_function(quality=quality)#,pretrained=True)
-
-        model_path = os.path.join(models_path, str(lambda_train) + 'checkpoint_best_loss.pth.tar')
-        states = torch.load(model_path)
-
-        try:
-            net.load_state_dict(states['state_dict'])
-        except Exception as e:
-            print(e)
-
-        net.update()
-        net.eval()
-        net=net.cuda()
-        test_transforms = transforms.Compose([transforms.Resize((224,224)), transforms.ToTensor()])
-        path = '/home/m813r/Projects/NeuralImageCompression/BitRateEval/Homogenized_uncompressed_Data/ValidationData'
-        _, _, files = next(os.walk(path))
-        start=time.time()
-        for file in files:
-            name = file
-            file = Image.open(os.path.join(path, file))
-            shape = file.size
-            file = np.asarray(file)
-            file = transforms.ToTensor()(file)
-            transformation = transforms.Resize((224, 224))
-            test = transformation(file)
-            test=test.unsqueeze(0).cuda()
-            BaseOutPath='/home/m813r/Projects/NeuralImageCompression/BitRateEval/Homogenized_uncompressed_Data/RetrainedSPL2/'+str(lambda_train)+'/'
-            os.makedirs(BaseOutPath,exist_ok=True)
-            name = name[:-4]
-            file_name = name  + '.bin'
-            FileOutputPath=os.path.join(BaseOutPath,file_name)
-            compressed, codec, out, x = EDF.encode(test, quality, net, FileOutputPath)
-        end=time.time()
-        print('quality factor:' ,quality)
-        print('Time for encoding:',end-start)
-
-
-"""
-With the CompressAI models i somehow can not do writing to disk and visual reconstruction together.
-Most likely due to issues with the entropy coding schemes
-So I have at first a CompressSQLC function that does the compression as bin files on the disk
-and then a function that does the decoding and visual reconstruction and storing visually the output 
-"""
 def CompressSQLC():
-    models_path='/home/m813r/ClusterCheckpoints/NeuralImageCompression/TrainedCAEmodels_SQLC/ReproduceRuns03_oldStainModel_HopeSameResults_SaveStainModelWeights/_bmshj2018-factorized/AdaptableBN_RandomAugment/'
+    models_path='/models/path/'
     _, Runs, _ = next(os.walk(models_path))
     lmds = [float(x.split('_')[-1]) for x in Runs]
     model_function = models['bmshj2018-factorized']
@@ -151,7 +76,6 @@ def CompressSQLC():
         net.eval()
         net.update()
         stainModel=CompressAINetwork_ShapePreserving()
-        #for run in IndividuallyTrainedStainModel:
         states = torch.load(models_path+str(lm)+'StainModelcheckpoint_best_loss.pth.tar')
         stainModel.load_state_dict(states['state_dict'])
         stainModel.eval()
@@ -165,7 +89,7 @@ def CompressSQLC():
             decoded = decoded[0, 0:3, :, :] / 255
             return Image.fromarray(np.asarray((decoded.permute(1, 2, 0).detach().cpu()) * 255, dtype=np.uint8))
 
-        OutPutBasePath = '/home/m813r/Projects/NeuralImageCompression/SegmentationBaseline/nnUNET/0/MeasureBPP/SQLC/BothCheckpoints'
+        OutPutBasePath = 'OutPath'
         os.makedirs(OutPutBasePath, exist_ok=True)
         StainConv = 'IndividualRun'
         CompressionModel = 'Original'
@@ -173,7 +97,7 @@ def CompressSQLC():
         os.makedirs(OutPath, exist_ok=True)
 
 
-        path = '/home/m813r/Projects/NeuralImageCompression/SegmentationBaseline/nnUNET/0/imgs4compression_bad_imgs_excluded'
+        path = '/path/to/files'
         _, _, files = next(os.walk(path))
         for file in files:
             name = file
@@ -190,7 +114,7 @@ def CompressSQLC():
 
 
 def DecodeSQLC():
-    models_path='/home/m813r/ClusterCheckpoints/NeuralImageCompression/TrainedCAEmodels_SQLC/ReproduceRuns03_oldStainModel_HopeSameResults_SaveStainModelWeights/_bmshj2018-factorized/AdaptableBN_RandomAugment/'
+    models_path='/models/path'
     _, Runs, _ = next(os.walk(models_path))
     lmds = [float(x.split('_')[-1]) for x in Runs]
     model_function = models['bmshj2018-factorized']
@@ -228,7 +152,7 @@ def DecodeSQLC():
                 decoded = stainModel.decode(reconstructed['x_hat'])
             decoded = decoded[0, 0:3, :, :] / 255
             return Image.fromarray(np.asarray((decoded.permute(1,2,0).detach().cpu())*255,dtype=np.uint8))
-        OutPutBasePath='/home/m813r/Projects/NeuralImageCompression/BitRateEval/KaggleTestData/SQLC'
+        OutPutBasePath='/Out/SQLC'
         os.makedirs(OutPutBasePath,exist_ok=True)
         StainConv='IndividualRun'
         CompressionModel='Original'
@@ -236,8 +160,8 @@ def DecodeSQLC():
         os.makedirs(OutPath,exist_ok=True)
 
         transformations=transforms.Compose([transforms.Resize(224),transforms.Lambda(StainDeconvHistomics),transforms.ToTensor(),transforms.Lambda(SQLCCompression)])
-        path = '/home/m813r/Projects/NeuralImageCompression/SegmentationBaseline/nnUNET/0/imgs4compression_bad_imgs_excluded' # path to compress segmentation files
-        files=glob.glob('/home/m813r/DataSSD/KaggleDataSets/BreaKHis/archive/BreaKHis_400X/test_cropped/*/*.png')### but for perceptual files i need the glob glob operation
+        path = '/path/to/files' # path to compress segmentation files
+        files=glob.glob('file/path')### but for perceptual files i need the glob glob operation
         #_, _, files = next(os.walk(path))
         for file in tqdm(files):
             #png_file = Image.open(os.path.join(path, file))
